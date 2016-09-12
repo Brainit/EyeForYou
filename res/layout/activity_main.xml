@@ -1,0 +1,47 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    tools:context="cn.brainit.eyeforyou.MainActivity" >
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@+id/textView1" >
+
+        <SurfaceView
+            android:id="@+id/surfaceView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:id="@+id/Rectange"
+            android:layout_width="200dp"
+            android:layout_height="50dp"
+            android:layout_gravity="center|center_vertical"
+            android:background="@drawable/rectange_border"
+            android:orientation="horizontal" >
+        </LinearLayout>
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/textView1"
+        android:layout_width="match_parent"
+        android:layout_height="100dp"
+        android:layout_above="@+id/holdButton"
+        android:layout_centerHorizontal="true"
+        android:gravity="center"
+        android:text="请扫描单词"
+        android:textColor="@android:color/holo_orange_dark" />
+
+    <Button
+        android:id="@+id/holdButton"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:background="@drawable/oval_button"
+        android:text="@string/get_word_by_press" />
+
+</RelativeLayout>
