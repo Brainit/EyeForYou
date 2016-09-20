@@ -1,15 +1,26 @@
 package cn.brainit.eyeforyou;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 import android.hardware.Camera;
+import android.hardware.Camera.AutoFocusCallback;
 import android.hardware.Camera.PreviewCallback;
 import android.hardware.Camera.Size;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -17,7 +28,11 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
 import android.widget.Button;
-import android.widget.Toast;
+import android.widget.ImageView;
+import cn.brainit.eyeforyou.util.DensityUtil;
+import cn.brainit.image.BinaryImage;
+import cn.brainit.image.GrayImage;
+import cn.brainit.image.Image;
 
 @SuppressLint("WrongCall")
 public class MainActivity extends Activity implements SurfaceHolder.Callback {
@@ -26,29 +41,152 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 	private SurfaceView mSurfaceview = null; // SurfaceView对象：(视图组件)视频显示
 	private SurfaceHolder mSurfaceHolder = null; // SurfaceHolder对象：(抽象接口)SurfaceView支持类
 	private Camera mCamera = null; // Camera对象，相机预览
-
 	private Button holdButton;
+	private ImageView cutPreview;
 
 	private static final String TAG = "MainActivity";
+	private static final int UPDATA_PREVIEW_IMAGE = 1;
 
 	private boolean bIfPreview;
 	@SuppressWarnings("unused")
 	private int mPreviewWidth, mPreviewHeight;
 
-	@SuppressWarnings("unused")
 	private int previewWidth, previewHeight, pictureWidth, pictureHeight;
 	PreviewCallback mJpegPreviewCallback = new Camera.PreviewCallback() {
 		@Override
-		public void onPreviewFrame(byte[] data, Camera camera) {
-			// 传递进来的data,默认是YUV420SP的
-			try {
-				Log.i(TAG, "going into onPreviewFrame");
+		public void onPreviewFrame(final byte[] data, Camera camera) {
+			camera.autoFocus(new AutoFocusCallback() {
+				@Override
+				public void onAutoFocus(boolean success, Camera camera) {
+					if (success) {
+						camera.cancelAutoFocus();// 只有加上了这一句，才会自动对焦。
+						if (null != imageTask) {
+							switch (imageTask.getStatus()) {
+							case RUNNING:
+								return;
+							case PENDING:
+								imageTask.cancel(false);
+								break;
+							default:
+								break;
+							}
+						}
+						imageTask = new ImageTask(data);
+						imageTask.execute((Void) null);
+					}
+				}
 
-			} catch (Exception e) {
-				Log.v("System.out", e.toString());
-			}
+			});
+
+			// Log.i(TAG, "going into onPreviewFrame");
+			// Bitmap mBitmap = null;
+			// if (null != data) {
+			// if (data.length != 0) {
+			// mBitmap = BitmapFactory.decodeByteArray(data, 0,
+			// data.length);// data是字节数据，将其解析成位图
+			// if (mBitmap != null) {
+			// Bitmap newBit = Bitmap.createBitmap(mBitmap, 100, 100,
+			// 100, 100);
+			// cutPreview.setImageBitmap(newBit);
+			// }
+			//
+			// } else {
+			// System.out.println("空的bitmap");
+			// }
+			//
+			// // mCamera.stopPreview();
+			// }
+			// bufferedImage --> bitmap
+			// // 设置FOCUS_MODE_CONTINUOUS_VIDEO)之后，myParam.set("rotation",
+			// // 90)失效。图片竟然不能旋转了，故这里要旋转下
+			// Matrix matrix = new Matrix();
+			// matrix.postRotate((float) 90.0);
+			// Bitmap rotaBitmap = Bitmap.createBitmap(mBitmap, 0, 0,
+			// mBitmap.getWidth(), mBitmap.getHeight(), matrix, false);
+			//
+			// // 旋转后rotaBitmap是960×1280.预览surfaview的大小是540×800
+			// // 将960×1280缩放到540×800
+			// Bitmap sizeBitmap = Bitmap.createScaledBitmap(rotaBitmap, 540,
+			// 800,
+			// true);
+			// Bitmap rectBitmap = Bitmap.createBitmap(sizeBitmap, 100, 200,
+			// 300,
+			// 300);// 截取
 		}
 	};
+	ImageTask imageTask;
+
+	Handler handler = new Handler() {
+
+		@Override
+		public void handleMessage(Message msg) {
+			switch (msg.what) {
+			case UPDATA_PREVIEW_IMAGE:
+				Bitmap bmp = (Bitmap) msg.obj;
+				cutPreview.setImageBitmap(bmp);
+				break;
+			default:
+				break;
+			}
+		}
+
+	};
+
+	public class ImageTask extends AsyncTask<Void, Void, Void> {
+
+		private byte[] mData;
+
+		// 构造函数
+		ImageTask(byte[] data) {
+			this.mData = data;
+		}
+
+		@Override
+		protected Void doInBackground(Void... params) {
+			// TODO Auto-generated method stub
+			Size size = mCamera.getParameters().getPreviewSize(); // 获取预览大小
+			final int w = size.width; // 宽度
+			final int h = size.height;
+
+			final YuvImage image = new YuvImage(mData, ImageFormat.NV21, w, h,
+					null);
+			ByteArrayOutputStream os = new ByteArrayOutputStream(mData.length);
+			if (!image.compressToJpeg(new Rect(0, 0, w, h), 100, os)) {
+				return null;
+			}
+			byte[] tmp = os.toByteArray();
+			Bitmap bmp = BitmapFactory.decodeByteArray(tmp, 0, tmp.length);
+			previewImage(bmp); // 自己定义的实时分析预览帧视频的算法
+			return null;
+		}
+
+		private void previewImage(Bitmap bmp) {
+			Bitmap ratioBitmap = adjustPhotoRotation(bmp, 90);
+			int viewWidth = DensityUtil.dp2px(MainActivity.this, 400);
+			int viewHeight = DensityUtil.dp2px(MainActivity.this, 400);
+			int cutWidth = DensityUtil.dp2px(MainActivity.this, 200);
+			int cutHeight = DensityUtil.dp2px(MainActivity.this, 50);
+			System.out.println(viewWidth);
+			System.out.println(viewHeight);
+			int width = (int) (ratioBitmap.getWidth() * ((double) cutWidth / (double) viewWidth));
+			int height = (int) (ratioBitmap.getHeight() * ((double) cutHeight / (double) viewHeight));
+			Bitmap newBit = Bitmap.createBitmap(ratioBitmap,
+					ratioBitmap.getWidth() / 2 - width / 2,
+					ratioBitmap.getHeight() / 2 - height / 2, width, height);
+			// int[] pixels = new int[newBit.getWidth() * newBit.getHeight()];
+			// newBit.getPixels(pixels, 0, newBit.getWidth(), 0, 0,
+			// newBit.getWidth(), newBit.getHeight());
+
+			Image image = ImageAdapter4A.loadImage(newBit);
+			GrayImage gray = image.grayWithAverage();
+			BinaryImage binary = gray.binaryWithOstu();
+			Bitmap bit = ImageAdapter4A.toBitmap(binary);
+			Message msg = new Message();
+			msg.what = UPDATA_PREVIEW_IMAGE;
+			msg.obj = bit;
+			handler.sendMessage(msg);
+		}
+	}
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -72,6 +210,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 		mSurfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);// 設置顯示器類型，setType必须设置
 		holdButton = (Button) findViewById(R.id.holdButton);
 		holdButton.setOnTouchListener(new HoldListener());
+		cutPreview = (ImageView) findViewById(R.id.cutPreview);
 	}
 
 	/* 【SurfaceHolder.Callback 回调函数】 */
@@ -166,11 +305,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 				previewHeight = previewSizes.get(previewSizes.size() - 1).height;
 				parameters.setPictureSize(pictureWidth, pictureHeight); // 指定拍照图片的大小
 				parameters.setPreviewSize(previewWidth, previewHeight); //
-				Toast.makeText(
-						MainActivity.this,
-						"参数信息:" + pictureWidth + "\\" + pictureHeight + "\\"
-								+ previewWidth + "\\" + previewHeight,
-						Toast.LENGTH_SHORT).show();
+
 				// parameters.setPreviewSize(mPreviewWidth, mPreviewHeight); //
 				// 指定preview的大小
 				// // 这两个属性 如果这两个属性设置的和真实手机的不一样时，就会报错
@@ -225,13 +360,61 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 		public boolean onTouch(View v, MotionEvent event) {
 			if (v.getId() == R.id.holdButton) {
 				if (event.getAction() == MotionEvent.ACTION_DOWN) {
+					// cutPreview.setVisibility(View.VISIBLE);
 					mCamera.setPreviewCallback(mJpegPreviewCallback);
 				}
 				if (event.getAction() == MotionEvent.ACTION_UP) {
+					// cutPreview.setVisibility(View.INVISIBLE);
 					mCamera.setPreviewCallback(null);
 				}
 			}
 			return false;
 		}
 	}
+
+	public static Bitmap adjustPhotoRotation(Bitmap bm,
+			final int orientationDegree) {
+		Matrix m = new Matrix();
+		m.setRotate(orientationDegree, (float) bm.getWidth() / 2,
+				(float) bm.getHeight() / 2);
+
+		try {
+			Bitmap bm1 = Bitmap.createBitmap(bm, 0, 0, bm.getWidth(),
+					bm.getHeight(), m, true);
+			return bm1;
+		} catch (OutOfMemoryError ex) {
+		}
+		return null;
+	}
+
+	/**
+	 * 获取控件的高度或者宽度 isHeight=true则为测量该控件的高度，isHeight=false则为测量该控件的宽度
+	 * 
+	 * @param view
+	 * @param isHeight
+	 * @return
+	 */
+	public static int getViewHeight(View view) {
+		int result;
+		if (view == null)
+			return 0;
+		int h = View.MeasureSpec.makeMeasureSpec(0,
+				View.MeasureSpec.UNSPECIFIED);
+		view.measure(h, 0);
+		result = view.getMeasuredHeight();
+
+		return result;
+	}
+
+	public static int getViewWidth(View view) {
+		int result;
+		if (view == null)
+			return 0;
+		int w = View.MeasureSpec.makeMeasureSpec(0,
+				View.MeasureSpec.UNSPECIFIED);
+		view.measure(0, w);
+		result = view.getMeasuredWidth();
+		return result;
+	}
+
 }

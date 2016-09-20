@@ -7,13 +7,16 @@
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@+id/textView1" >
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_above="@+id/holdButton"
+        android:layout_centerHorizontal="true">
 
         <SurfaceView
             android:id="@+id/surfaceView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_width="400dp"
+            android:layout_height="400dp"
+            android:layout_gravity="center|center_vertical" />
 
         <LinearLayout
             android:id="@+id/Rectange"
@@ -25,15 +28,15 @@
         </LinearLayout>
     </FrameLayout>
 
-    <TextView
-        android:id="@+id/textView1"
-        android:layout_width="match_parent"
+    <ImageView
+        android:id="@+id/cutPreview"
+        android:layout_width="100dp"
         android:layout_height="100dp"
         android:layout_above="@+id/holdButton"
-        android:layout_centerHorizontal="true"
-        android:gravity="center"
-        android:text="请扫描单词"
-        android:textColor="@android:color/holo_orange_dark" />
+        android:layout_gravity="center|bottom"
+        android:contentDescription="@string/hello_world"
+        android:src="@drawable/eye" >
+    </ImageView>
 
     <Button
         android:id="@+id/holdButton"
